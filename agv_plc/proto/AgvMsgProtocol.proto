@@ -1,0 +1,538 @@
+syntax = "proto3";
+
+package scheduling_system;
+
+// Java package for FV2-simulator generated code (wire format unchanged; AOS uses its own generated classes).
+option java_package = "com.yeefung.fv2.plc.simulator.proto";
+option java_outer_classname = "AgvMsgProtocol";
+option java_multiple_files = false;
+
+enum TaskObjectives
+{
+    UNKNOW_TYPE = 0;
+    LOAD_CARGO = 1;
+    UNLOAD_CARGO = 2;
+    CHARGE = 3;
+    END_CHARGE = 4;
+    GO_HOME = 5;
+    AVOIDANCE = 6; // 避让
+}
+
+message NewTaskMsg
+{
+    // 帧编号，整个通信过程中唯一，且递增
+    int32 frame_id = 1;
+    // AGV编号
+    int32 agv_id = 2;
+    // 任务编号
+    int32 task_id = 3;
+    // 任务目标点
+    int32 target_point = 4;
+    // 保留字段
+    int32 magic = 5;
+    // 任务目标站台
+    int32 target_station = 6;
+    // 第0个是中文，第1个是英文
+    repeated string route_msgs = 7;
+    // 任务类型
+    TaskObjectives task_objectives = 8;
+    // 任务起始点，卸货任务填写
+    int32 start_point = 9;
+    // 任务起始点名称，没有名称的时候这个字段填写任务起始点，卸货任务填写
+    string start_name = 10;
+    // 目标点名称，没有名称的时候这个字段填写目标点
+    string target_name = 11;
+}
+
+message SegmentMsg
+{
+    // 帧编号，整个通信过程中唯一，且递增
+    int32 frame_id = 1;
+    int32 agv_id = 2;
+    int32 task_id = 3;
+    // 下一段的角度信息，AGV在走完所有下发段，但没有到达目标点时，可利用该信息提前转向
+    int32 angle = 4;
+    // 任务目标点
+    int32 target_point = 5;
+    // 段列表，AGV根据段列表进行移动
+    repeated int32 segments = 6;
+    // 保留字段
+    int32 magic = 7;
+}
+
+message OperationMsg
+{
+    // 帧编号，整个通信过程中唯一，且递增
+    int32 frame_id = 1;
+    int32 agv_id = 2;
+    int32 task_id = 3;
+    // 任务目标点
+    int32 target_point = 4;
+    // 操作码
+    int32 op_code = 5;
+    int32 magic = 6;
+}
+
+// NewTaskMsg、SegmentMsg、OperationMsg消息的响应消息
+message AckMsg
+{
+    int32 agv_id = 1;
+    int32 frame_id = 2;
+}
+
+// 定义小车类型枚举
+enum VehicleType
+{
+    VEHICLE_UNKNOWN = 0; // 未知类型
+    VEHICLE_I = 1;       // 车辆类型1，激光导航叉车
+    VEHICLE_II = 2;      // 车辆类型2，二维码导航小精灵
+    VEHICLE_III = 3;     // 车辆类型3，视觉导航小精灵
+    VEHICLE_IV = 4;
+    VEHICLE_V = 5;
+    VEHICLE_VI = 6;
+    VEHICLE_VII = 7;
+    VEHICLE_VIII = 8;
+}
+
+ // 状态位
+enum BitStatus
+{
+    AGV_ERROR = 0;
+    LOADED = 1;
+    OBSTACLE = 2;
+    NEEDCHARGE = 3;
+    CHARGING = 4;
+    OPERATING = 5;
+    MOVING = 6;
+    INSERTED = 7;
+    ESTOP = 8;
+    PAUSE = 9;
+    HOSTESTOP = 10;
+    ALLOWBACK = 11;
+    SHUTDOWN = 12;
+}
+// 小车模式
+enum VehicleMode
+{
+    // UNKNOW = 0
+    MANUAL = 0; // 手动模式
+    LOCAL = 1;  // 本地模式
+    MASTER = 2; // 上位模式
+}
+
+// AGV故障状态上报
+message FaultMsg
+{
+    int32 code = 1;  // 故障号
+    string message = 2; // 故障描述
+}
+
+// AGV状态消息
+message StatusMsg
+{
+    // 帧编号，整个通信过程中唯一，且递增
+    int32 frame_id = 21;
+    // AGV编号
+    int32 agv_id = 1;
+    // 车辆类型
+    VehicleType vehicle_type = 2; // 定义枚举
+    // AGV模式
+    VehicleMode mode = 3;
+    // 任务编号
+    int32 task_id = 4;
+    // AGV当前所在点
+    int32 point = 5;
+    // AGV当前所在段
+    int32 segment = 6;
+    // AGV的x坐标（单位：毫米 mm，与 OpenTCS 植物模型 point 世界坐标一致；约为 VDA agvPosition.x(米)*1000）
+    double x = 7;
+    // AGV的y坐标（单位：毫米 mm）
+    double y = 8;
+    // AGV航向角（度 °；内部仿真与 VDA 一致为弧度，上报前换算）。曲线段随路径切向变化。
+    double heading = 9;
+    // AGV方向,定义车头方向为正向，1 表示正向行使，0 表示反向行使
+    int32 direction = 10;
+    // 当前段已移动的距离（毫米；沿当前 path 几何的弧长，植物路径模拟时与位姿同步更新）
+    int32 seg_distance = 11;
+    // 是否空闲、是否正在移动、是否插入系统
+    repeated BitStatus status = 12;
+    // AGV行走速度
+    int32 linear_speed = 13;
+    // AGV转向速度
+    int32 angular_speed = 14;
+    // 移动是否完成
+    int32 move_result = 15;
+    // 操作是否完成
+    int32 operation_result = 16;  //-1表等待操作完成、0表示任务失败、1表示任务完成
+    // 电池电量，取值0～100，表示0%～100%（optional 以便 0% 仍带 presence，与线上一致）
+    optional int32 battery_percent = 17;
+    // AGV错误码，允许同时存在多个错误
+    int32 error_code = 18;
+    // AGV错误码对应的错误详情
+    string error_message = 19;
+    // 操作码
+    int32 op_code = 20;  // postaddition
+    // AGV故障状态
+    repeated FaultMsg faultmsg = 22;
+    // 举升操作里程
+    uint64 lift_mileage = 23;
+    // 移动里程 
+    uint64 travel_odometer = 24; 
+    // 子车移动里程
+    uint32 subvehicle_mileage = 25;
+    // 子车充电状态
+    uint32 child_chargestate = 26;
+    // AGV警告状态
+    repeated FaultMsg warnmsg = 27;
+}
+
+// PLC键值对
+message PLCItem
+{
+    // 标记要写或者读取的索引
+    int32 key = 1;
+    // 标记要写或者读取的值
+    int32 value = 2;
+}
+
+message PLCWriteMsg
+{
+    // 帧编号，整个通信过程中唯一，且递增
+    int32 frame_id = 1;
+    // 需要写PLC的AGV编号
+    int32 agv_id = 2;
+    // 需要写PLC的任务编号
+    int32 task_id = 3;
+    // 要写的PLCItem数组，一次性可以写入多个
+    repeated PLCItem items = 4;
+}
+
+message PLCReadMsg
+{
+    // 帧编号，整个通信过程中唯一，且递增
+    int32 frame_id = 1;
+    // 需要写PLC的AGV编号
+    int32 agv_id = 2;
+    // 需要写PLC的任务编号
+    int32 task_id = 3;
+    // 要读的PLC索引数组
+    repeated int32 keys = 4;
+}
+
+message PLCResponseMsg
+{
+    // 帧编号，整个通信过程中唯一，且递增
+    int32 frame_id = 1;
+    // 需要写PLC的AGV编号
+    int32 agv_id = 2;
+    // 需要写PLC的任务编号
+    int32 task_id = 3;
+    // 标记读写类型，0 表示读取变量，1 表示写变量
+    int32 type = 4;
+    // 读写是否成功，0 成功，非零 失败
+    int32 result = 5;
+    // 返回写入之前的结果或者读取的结果
+    repeated PLCItem items = 6;
+}
+
+//远程急停状态
+enum EstopStatus
+{
+    RELEASESTOP = 0; // 释放急停
+    ACTIVATEESTOP = 1;  // 激活急停
+}
+
+message EstopMsg
+{
+    // 帧编号，整个通信过程中唯一，且递增
+    int32 frame_id = 1;
+    // 需要写PLC的AGV编号
+    int32 agv_id = 2;
+    // 需要写PLC的任务编号
+    EstopStatus estop_status = 3;
+}
+
+enum Direction
+{
+    DIR_Reverse = 0;
+    DIR_Rotation = 1;
+    DIR_Forward = 2;
+}
+
+message PlanSeg
+{
+    // 规划段id
+    int32 segment_id = 1;
+    // 段方向
+    Direction segment_dir = 2;
+    // 段速度
+    double segment_spd = 3;
+    // 起始点id
+    int32 startpoint_id = 4;
+    // 起始点X坐标
+    double startpoint_x = 5;
+    // 起始点Y坐标
+    double startpoint_y = 6;
+    // 起始点角度
+    double startpoint_angle = 7;
+    // 起始点layout对应点
+    int32 startlayout_p = 8;
+    // 终点id
+    int32 endpoint_id = 9;
+    // 终点X坐标
+    double endpoint_x = 10;
+    // 终点Y坐标
+    double endpoint_y = 11;
+    // 终点角度
+    double endpoint_angle = 12;
+    // 终止点layout对应点
+    int32 endlayout_p = 13;
+}
+
+enum PlanType
+{
+    // 静态规划
+    Static_Plan = 0;
+    // 连续规划
+    Continuous_Plan = 1;
+    // 进入layout规划
+    ToLayout_Plan = 2;
+}
+
+message RoutePlanMsg
+{
+    int32 agv_id = 1;
+    int32 frame_id = 2;
+    PlanType plan_type = 3;
+    repeated PlanSeg plansegs = 4;
+}
+
+message OutStationRouteMsg
+{
+    int32 agv_id = 1;
+    int32 frame_id = 2;
+    // 出站台段列表
+    repeated int32 segments = 3;
+}
+
+// 路径规划消息响应
+message RouteAckMsg
+{
+    int32 agv_id = 1;
+    int32 frame_id = 2;
+}
+
+message ClearRouteMsg
+{
+    int32 agv_id = 1;
+    int32 frame_id = 2;
+}
+
+message RequestProcessTaskMsg
+{
+    int32 frame_id = 1;
+    int32 agv_id = 2;
+    int32 task_id = 3;
+    // 请求类型：0取消；1完成；2重做；3释放交通； 4站台完成；5重对位；6切换路径；7充电任务；8home任务
+    int32 request = 4;
+    // 保留(default = 0)
+    int32 magic = 5;
+}
+
+message RequestProcessTaskAckMsg
+{
+    int32 frame_id = 1;
+    int32 agv_id = 2;
+    int32 task_id = 3;
+    // 保留(default = 0)
+    int32 magic = 4;
+    // 返回结果，成功时返回0，失败时返回结果大于0
+    int32 result = 5;
+    // 成功时message填写"成功"，失败时填写具体失败原因，容器里第0个是中文，第一个是英文
+    repeated string message = 6;
+}
+
+// 清除错误信息
+message ClearErrorMsg
+{
+    int32 frame_id = 1;
+    int32 agv_id = 2;
+    // 警告队列
+    repeated int32 warn_code = 3;
+    // 故障队列
+    repeated int32 fault_code = 4;
+}
+
+message SwitchPathMsg
+{
+    int32 frame_id = 1;
+    int32 agv_id = 2;
+    int32 task_id = 3;
+    repeated int32 fallback_seg = 4; // 回退段表
+}
+
+message SwitchPathAckMsg
+{
+    int32 frame_id = 1;
+    int32 agv_id = 2;
+    int32 task_id = 3;
+    bool process_result = 4; // 回退到目标点标识
+}
+
+// 调度收到Agv的SwitchPathAckMsg后回复的消息
+message SwitchPathAckAckMsg
+{
+    int32 frame_id = 1;
+    int32 agv_id = 2;
+    int32 task_id = 3;
+}
+
+message CancelTaskMsg
+{
+    int32 frame_id = 1;
+    int32 agv_id = 2;
+    int32 task_id = 3;
+}
+
+// 先把交通信息下发给对应车辆
+message TrafficMsg
+{
+    int32 frame_id = 1;
+    int32 agv_id = 2;
+    string traffic_msg = 3;
+}
+
+message FileMsg
+{
+    enum FileType
+    {
+        LAYOUT = 0;
+        VEHICLEAPP = 1;
+    }
+
+    enum MsgType
+    {
+        START = 0;
+        CONTENT = 1;
+        END = 2;
+    }
+
+    FileType file_type = 1;
+    MsgType msg_type = 2;
+    int32 file_size = 3;
+    bytes data = 4;
+    int32 agv_id = 5;
+    int32 index = 6; // 序列号，表示第几包
+}
+
+message FileAckMsg
+{
+    enum ResponseType
+    {
+        ACK = 0;
+        NACK = 1;
+    }
+
+    ResponseType type = 1;
+    int32 agv_id = 2;
+    int32 index = 3;
+}
+
+message VehicleParamMsg
+{
+    int32 agv_id = 1;
+    map<string, string> config_params = 2;
+}
+
+message BindMsg
+{
+    enum BindState
+    {
+        INDEPENDENCE = 0;
+        LEADER = 1;
+        FOLLOWER = 2;
+    }
+
+    enum BindRunState
+    {
+        SYNC = 0;
+        ASYNC = 1;
+    }
+
+    int32 frame_id = 1;
+    int32 agv_id = 2;
+    BindState bind_state = 3;
+    BindRunState bind_run_state = 4;
+    int32 leader_agv_id = 5;
+    string leader_agv_ip = 6;
+    int32 leader_agv_port = 7;
+    int32 follower_agv_id = 8;
+    int32 bind_type = 9;
+    int32 target_point = 10;
+}
+
+message FixedtimeStatisticalMsg
+{
+    string time = 1;
+    // 驱动器峰值电流
+    double front_speed_peak_current = 2; //前行走电流
+    double front_steer_peak_current = 3; //前舵轮电流
+    double left_left_peak_current = 4;   //后左左电流
+    double left_right_peak_current = 5;  //后左右电流
+    double right_left_peak_current = 6;  //后右左电流
+    double right_right_peak_current = 7; //后右右电流
+    // 驱动器温度
+    double front_speed_temp = 8;  //前行走温度
+    double front_steer_temp = 9;   //前舵轮温度
+    double left_left_temp = 10;     //后左左温度
+    double left_right_temp = 11;    //后左右温度
+    double right_left_temp = 12;    //后右左温度
+    double right_right_temp = 13;   //后右右温度
+    //电池电量
+    int32 power_percentage = 14;
+    //电压值
+    double battery_voltage = 15;    //电池电压
+    double front_speed_voltage = 16;//前行走电压
+    double front_steer_voltage = 17;//前舵轮电压
+    double left_left_voltage = 18;  //后左左电压
+    double left_right_voltage = 19; //后左右电压
+    double right_left_voltage = 20; //后右左电压
+    double right_right_voltage = 21;//后右右电压
+    //定位质量
+    int32 location_confidence_level = 22; 
+    //跟踪路径偏差距离
+    int32 path_offset_distance = 23;
+}
+
+message TotalStatisticalMsg
+{
+    string time = 1;
+    // 总里程
+    double left_left_mileage = 2;  //后左左舵轮总里程
+    double left_right_mileage = 3; //后左右舵轮总里程
+    double right_left_mileage = 4; //后右左舵轮总里程
+    double right_right_mileage = 5; //后右右舵轮总里程
+    double front_mileage = 6;       //前舵轮总里程
+    double total_mileage = 7;       //车总里程
+    // 舵轮回转次数（累计90度为一次）
+    int32 front_steer_rotate_times = 8; //前舵轮回转次数
+    int32 left_steer_rotate_times = 9; //后左舵轮回转次数
+    int32 rigth_steer_rotate_times = 10; //后右舵轮回转次数
+    //夹臂举升次数（下降到位后，上升到位为一次）
+    int32 arm_clamp_times = 11;  //夹臂举升次数
+    //抱闸次数
+    int32 front_speed_clock_times = 12; //前行走抱闸次数
+    //掉电总比例
+    int32 discharge_num = 13;
+    // 急停次数
+    int32 soft_estop_times = 14;  //软件急停次数
+    int32 total_estop_times = 15; // 总急停次数
+    // 按钮按下次数
+    int32 hard_estop_button_times = 16; //急停按钮按下次数
+    int32 mode_button_times = 17;       //模式切换按钮按下次数
+    int32 reset_button_times = 18;      //复位按钮按下次数
+    // 重定位次数
+    int32 relocate_times = 19;
+}
+
+

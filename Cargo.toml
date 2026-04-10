@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "sim_shared",
+    "agv_plc",
+    "agv_vda050",
+]
+resolver = "2"

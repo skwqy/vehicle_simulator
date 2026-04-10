@@ -1,0 +1,22 @@
+[package]
+name = "agv_plc"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+prost-build = "0.13"
+protoc-bin-vendored = "3"
+
+[dependencies]
+prost = "0.13"
+config-file = "0.2.3"
+serde = { version = "1.0.104", features = ["derive"] }
+tokio = { version = "1.12.0", features = ["full"] }
+chrono = "0.4.38"
+quick-xml = "0.37"
+thiserror = "2.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "std"] }
+tracing-appender = "0.2"
+log = "0.4"
+sim_shared = { path = "../sim_shared" }

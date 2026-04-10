@@ -1,0 +1,51 @@
+# 连接 YFAOS `AgvSocketServer` 的 TCP 客户端（兼容 FV2 帧格式）。
+
+[socket]
+host = "127.0.0.1"
+port = 8008
+connect_timeout_ms = 10000
+read_timeout_ms = 0
+max_frame_length = 65536
+uplink_has_crc = true
+reconnect_enabled = true
+reconnect_interval_ms = 5000
+
+[vehicle]
+serial_number = "Vehicle_"
+manufacturer = "defaultManufacturer"
+
+[map]
+enabled = true
+xml_path = "maps/youle-final-4.xml"
+layout_scale_mm = 1.0
+layout_flip_y = false
+sim_dt_seconds = 0.05
+# 按车队索引 0,1,… 填写初始点；名称必须存在于 plant XML；多车时应使用不同点位。
+initial_point_names = ["Point_1"]
+
+[map.name_prefixes]
+apply_stripping = true
+point_prefix = "Point_"
+path_prefix = "Path_"
+
+# 车队配置：共 robot_count 台车。serial_suffix_start + robot_index
+# 对应车辆序列号后缀与 protobuf 的 agv_id（例如 Vehicle_2 / agv_id 2，Vehicle_3 / agv_id 3，…）。
+[settings]
+robot_count = 1
+serial_suffix_start = 2
+map_id = ""
+log_max_file_bytes = 10485760
+log_max_files = 10
+
+[simulation]
+status_interval_ms = 200
+status_interval_moving_ms = 100
+segment_travel_ms = 2000
+default_linear_speed_mm_s = 500
+battery_percent = 100
+battery_low_threshold_percent = -1
+charging = false
+initial_point = 0
+initial_x_mm = 0.0
+initial_y_mm = 0.0
+initial_heading_deg = 0.0
