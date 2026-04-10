@@ -21,7 +21,7 @@ pub(super) fn build_payload(eng: &mut PlcProtobufEngine) -> Vec<u8> {
         .unwrap_or(0);
 
     let linear_speed = if eng.moving {
-        pb.default_linear_speed_mm_s
+        pb.default_linear_speed_mm_s()
     } else {
         0
     };

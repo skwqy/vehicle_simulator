@@ -42,7 +42,7 @@ async fn main() {
     }
 }
 
-/// One `VehicleSimulator` + TCP session to the scheduler (same spawn pattern as `agv_vda050`).
+/// One `VehicleSimulator` + TCP session to the scheduler (same spawn pattern as `agv_vda5050`).
 async fn spawn_vehicle_simulator(
     config: config::Config,
     robot_index: u32,

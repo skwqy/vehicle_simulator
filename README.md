@@ -3,7 +3,7 @@
 该仓库统一管理两个仿真器：
 
 - `agv_plc`：基于 TCP/FV2 的 PLC 仿真器
-- `agv_vda050`：基于 MQTT/VDA5050 的仿真器
+- `agv_vda5050`：基于 MQTT/VDA5050 的仿真器
 
 ## 目录结构
 
@@ -13,10 +13,9 @@ vehicle_simulator/
   Cargo.lock
   sim_shared/                # 公共模块（map/navigation/logging/common）
   agv_plc/
-  agv_vda050/
-  run.bat                    # 启动：agv | vda | all
+  agv_vda5050/
   build_agv_plc.bat          # 打包到 dist/agv_plc
-  build_agv_vda050.bat       # 打包到 dist/agv_vda050
+  build_agv_vda5050.bat      # 打包到 dist/agv_vda5050
   README.md
 ```
 
@@ -26,9 +25,8 @@ vehicle_simulator/
 
 ```bat
 cargo check --workspace
-run.bat agv
-run.bat vda
-run.bat all
+cargo run --release -p agv_plc
+cargo run --release -p agv_vda5050
 ```
 
 ## 打包发布
@@ -37,13 +35,13 @@ run.bat all
 
 ```bat
 build_agv_plc.bat
-build_agv_vda050.bat
+build_agv_vda5050.bat
 ```
 
 输出目录：
 
 - `dist/agv_plc/`
-- `dist/agv_vda050/`
+- `dist/agv_vda5050/`
 
 每个输出目录包含：
 
@@ -54,7 +52,7 @@ build_agv_vda050.bat
 ## 配置文件
 
 - `agv_plc/config.toml`
-- `agv_vda050/config.toml`
+- `agv_vda5050/config.toml`
 
 ## 公共模块
 

@@ -3,7 +3,7 @@ use std::time::Duration;
 use sim_shared::common::fleet_serial;
 use tokio::sync::Mutex;
 
-use agv_vda050::{
+use agv_vda5050::{
     config, logging, map, mqtt_handler, vehicle_simulator::VehicleSimulator,
 };
 
@@ -81,9 +81,9 @@ async fn spawn_vehicle_simulator(
     // Spawn MQTT publishing task (state: event + heartbeat per docs/vda5050-state-publish-design.md)
     tokio::spawn(publish_vda_messages(
         simulator_for_publish,
-        config.settings.state_max_interval_secs,
+        config.simulation.state_max_interval_secs,
         config.map.sim_dt_seconds,
-        config.settings.visualization_frequency,
+        config.simulation.visualization_frequency,
         log_target.clone(),
     ));
 }

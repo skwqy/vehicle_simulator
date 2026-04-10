@@ -707,7 +707,7 @@ impl VehicleSimulator {
     fn is_action_in_progress(&self) -> bool {
         if let Some(start_time) = self.action_start_time {
             let current_time = chrono::Utc::now().timestamp();
-            let action_duration = self.config.settings.action_time as i64;
+            let action_duration = self.config.simulation.action_time as i64;
             current_time < start_time.timestamp() + action_duration
         } else {
             false
@@ -823,7 +823,7 @@ impl VehicleSimulator {
             let step = resolve_distance_per_tick(
                 order_edge.as_ref(),
                 order_edge.as_ref().and_then(|e| self.map_path_max_m_s(e)),
-                self.config.settings.speed,
+                self.config.simulation.speed_m_s,
                 dt,
             );
             let updated_position = self.calculate_new_position_with_speed(
@@ -879,7 +879,7 @@ impl VehicleSimulator {
         let step = resolve_distance_per_tick(
             order_edge.as_ref(),
             path_max,
-            self.config.settings.speed,
+            self.config.simulation.speed_m_s,
             dt,
         );
         self.edge_distance_m = (self.edge_distance_m + step).min(total_l);

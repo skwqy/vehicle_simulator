@@ -1,6 +1,6 @@
-use vda5050_vehicle_simulator::{
+use agv_vda5050::{
     vehicle_simulator::VehicleSimulator,
-    config::{Config, MapConfig, MqttBrokerConfig, VehicleConfig, Settings},
+    config::{Config, MapConfig, MqttBrokerConfig, SimulationConfig, VehicleConfig, Settings},
     protocol::vda_2_0_0::{
         vda5050_2_0_0_action::{Action, ActionParameter, ActionParameterValue, BlockingType},
         vda5050_2_0_0_instant_actions::InstantActions,
@@ -28,16 +28,23 @@ fn create_test_config() -> Config {
         },
         settings: Settings {
             map_id: "test_map".to_string(),
-            state_frequency: 1,
-            visualization_frequency: 5,
-            action_time: 1.0,
             robot_count: 1,
-            speed: 0.1,
             serial_suffix_start: 1,
-            state_max_interval_secs: 30,
             log_visualization_messages: false,
             log_max_file_bytes: 10 * 1024 * 1024,
             log_max_files: 10,
+            legacy_action_time: None,
+            legacy_speed_m_s: None,
+            legacy_state_frequency: None,
+            legacy_visualization_frequency: None,
+            legacy_state_max_interval_secs: None,
+        },
+        simulation: SimulationConfig {
+            action_time: 1.0,
+            speed_m_s: 2.0,
+            state_frequency: 1,
+            visualization_frequency: 5,
+            state_max_interval_secs: 30,
         },
         map: MapConfig::default(),
     }
@@ -126,7 +133,7 @@ fn create_small_order() -> Order {
                 released: true,
                 start_node_id: "node_001".to_string(),
                 end_node_id: "node_002".to_string(),
-                // Omit m/s cap so per-tick motion matches legacy `settings.speed` in tests
+                // Omit m/s cap so base speed from settings is used
                 max_speed: None,
                 max_height: None,
                 min_height: None,
@@ -946,7 +953,7 @@ fn test_pick_action_with_minimal_parameters() {
 #[test]
 fn test_initial_point_from_map_matches_java_initial_point_names() {
     use std::sync::Arc;
-    use vda5050_vehicle_simulator::map::{MapModel, MapPoint};
+    use agv_vda5050::map::{MapModel, MapPoint};
 
     let mut config = create_test_config();
     config.map.initial_point_names = vec!["Point_X".to_string()];

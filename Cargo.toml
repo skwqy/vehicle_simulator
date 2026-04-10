@@ -2,6 +2,6 @@
 members = [
     "sim_shared",
     "agv_plc",
-    "agv_vda050",
+    "agv_vda5050",
 ]
 resolver = "2"

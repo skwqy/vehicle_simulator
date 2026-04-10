@@ -174,8 +174,8 @@ fn default_segment_travel_ms() -> u64 {
     2000
 }
 
-fn default_default_linear_speed_mm_s() -> i32 {
-    500
+fn default_default_linear_speed_m_s() -> f32 {
+    0.5
 }
 
 fn default_battery_percent() -> i32 {
@@ -197,10 +197,12 @@ pub struct SimulationConfig {
     #[serde(default = "default_segment_travel_ms", alias = "segmentTravelMs")]
     pub segment_travel_ms: u64,
     #[serde(
-        default = "default_default_linear_speed_mm_s",
-        alias = "defaultLinearSpeed"
+        default = "default_default_linear_speed_m_s",
+        alias = "defaultLinearSpeed",
+        alias = "default_linear_speed_mm_s",
+        alias = "speed_m_s"
     )]
-    pub default_linear_speed_mm_s: i32,
+    pub default_linear_speed_m_s: f32,
     #[serde(default = "default_battery_percent", alias = "batteryPercent")]
     pub battery_percent: i32,
     #[serde(
@@ -226,7 +228,7 @@ impl Default for SimulationConfig {
             status_interval_ms: default_status_interval_ms(),
             status_interval_moving_ms: default_status_interval_moving_ms(),
             segment_travel_ms: default_segment_travel_ms(),
-            default_linear_speed_mm_s: default_default_linear_speed_mm_s(),
+            default_linear_speed_m_s: default_default_linear_speed_m_s(),
             battery_percent: default_battery_percent(),
             battery_low_threshold_percent: default_battery_low_threshold(),
             charging: false,
@@ -235,6 +237,12 @@ impl Default for SimulationConfig {
             initial_y_mm: 0.0,
             initial_heading_deg: 0.0,
         }
+    }
+}
+
+impl SimulationConfig {
+    pub fn default_linear_speed_mm_s(&self) -> i32 {
+        (self.default_linear_speed_m_s.max(0.0) * 1000.0).round() as i32
     }
 }
 

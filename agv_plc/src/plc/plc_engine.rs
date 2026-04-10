@@ -142,7 +142,7 @@ impl PlcProtobufEngine {
     pub fn tick(&mut self, dt_seconds: f32) {
         let dt = dt_seconds.max(1e-6);
         if self.active_route.is_some() {
-            let speed_mps = self.pb().default_linear_speed_mm_s as f32 / 1000.0;
+            let speed_mps = self.pb().default_linear_speed_m_s.max(0.0);
             let mut dist = speed_mps * dt;
             let done = {
                 let Some(route) = self.active_route.as_mut() else {

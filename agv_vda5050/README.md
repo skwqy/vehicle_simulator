@@ -1,4 +1,4 @@
-# agv_vda050
+# agv_vda5050
 
 基于 Rust 的 MQTT/VDA5050 仿真器。
 
@@ -20,7 +20,7 @@
 ## 本地运行
 
 ```bat
-cd /d d:\workspace\simulator\vehicle_simulator\agv_vda050
+cd /d d:\workspace\simulator\vehicle_simulator\agv_vda5050
 cargo run --release
 ```
 
@@ -28,26 +28,27 @@ cargo run --release
 
 ```bat
 cd /d d:\workspace\simulator\vehicle_simulator
-build_agv_vda050.bat
+build_agv_vda5050.bat
 ```
 
 输出目录：
 
-- `dist/agv_vda050/agv_vda050.exe`
-- `dist/agv_vda050/config.toml`
-- `dist/agv_vda050/maps/`（若存在）
+- `dist/agv_vda5050/agv_vda5050.exe`
+- `dist/agv_vda5050/config.toml`
+- `dist/agv_vda5050/maps/`（若存在）
 
 ## 配置分区
 
 - `[mqtt_broker]`：MQTT 连接和接口配置
 - `[vehicle]`：序列号前缀、厂商、VDA 版本
-- `[settings]`：频率、速度、多车、日志参数
+- `[settings]`：多车与日志参数
+- `[simulation]`：频率、速度、动作时长参数
 - `[map]`：地图与名称前缀规则
 
 常用参数：
 
-- `settings.state_max_interval_secs`
-- `settings.visualization_frequency`
+- `simulation.state_max_interval_secs`
+- `simulation.visualization_frequency`
 - `settings.log_visualization_messages`
 - `settings.log_max_file_bytes`
 - `settings.log_max_files`

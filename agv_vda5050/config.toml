@@ -28,13 +28,7 @@ path_prefix = "Path_"
 
 [settings]
 map_id = ""
-state_frequency = 1
-# 无事件触发时，state 消息的最大间隔（VDA 基线 30 秒）
-state_max_interval_secs = 30
-visualization_frequency = 1
-action_time = 1.0
 robot_count = 1
-speed = 0.05
 # 车队配置：共 robot_count 台车。serial_suffix_start + robot_index
 # 对应车辆序列号后缀（例如前缀 "Vehicle_" 且起始为 2，则依次为 "Vehicle_2"、"Vehicle_3"、…）。
 serial_suffix_start = 2
@@ -43,3 +37,11 @@ log_visualization_messages = false
 # 每个日志流的轮转参数：单文件最大大小，以及最大文件数（当前文件 + 备份，超出后删除最旧）。
 log_max_file_bytes = 10485760
 log_max_files = 10
+
+[simulation]
+state_frequency = 1
+# 无事件触发时，state 消息的最大间隔（VDA 基线 30 秒）
+state_max_interval_secs = 30
+visualization_frequency = 1
+action_time = 1.0
+speed_m_s = 1.0
