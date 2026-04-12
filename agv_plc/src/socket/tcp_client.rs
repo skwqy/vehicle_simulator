@@ -50,6 +50,163 @@ fn physics_tick_ms(cfg: &Config) -> u64 {
     step.max(20)
 }
 
+/// One attempt to connect to the scheduler; logs and returns `None` on failure or timeout.
+async fn tcp_connect_to_scheduler(
+    addr: SocketAddr,
+    connect_timeout_ms: u64,
+    vehicle_tag: &str,
+) -> Option<TcpStream> {
+    if connect_timeout_ms > 0 {
+        match tokio::time::timeout(
+            Duration::from_millis(connect_timeout_ms),
+            TcpStream::connect(addr),
+        )
+        .await
+        {
+            Ok(Ok(stream)) => Some(stream),
+            Ok(Err(e)) => {
+                warn!(
+                    target: "socket",
+                    "[{}] NOT CONNECTED — connect failed to {}: {e}",
+                    vehicle_tag,
+                    addr
+                );
+                None
+            }
+            Err(_) => {
+                warn!(
+                    target: "socket",
+                    "[{}] NOT CONNECTED — connect timeout to {} after {} ms",
+                    vehicle_tag,
+                    addr,
+                    connect_timeout_ms
+                );
+                None
+            }
+        }
+    } else {
+        match TcpStream::connect(addr).await {
+            Ok(stream) => Some(stream),
+            Err(e) => {
+                warn!(
+                    target: "socket",
+                    "[{}] NOT CONNECTED — connect failed to {}: {e}",
+                    vehicle_tag,
+                    addr
+                );
+                None
+            }
+        }
+    }
+}
+
+/// Background task: advance physics on an interval and publish `StatusMsg` when due.
+fn spawn_physics_status_tick_task(
+    write: Arc<Mutex<OwnedWriteHalf>>,
+    engine: Arc<Mutex<VehicleSimulator>>,
+    tick_ms: u64,
+    sim_dt: f32,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(Duration::from_millis(tick_ms));
+        loop {
+            ticker.tick().await;
+            let mut eng = engine.lock().await;
+            eng.tick(sim_dt);
+            if !eng.should_publish_status() {
+                continue;
+            }
+            let pb = eng.build_status_payload();
+            drop(eng);
+            let body = wrap("StatusMsg", &pb);
+            let mut w = write.lock().await;
+            if write_tcp_frame(&mut *w, &body).await.is_err() {
+                break;
+            }
+            drop(w);
+            engine.lock().await.after_status_published();
+        }
+    })
+}
+
+/// Read MC → AGV frames, drive the simulator, and write replies (and follow-up status) on the same TCP connection.
+async fn session_downlink_loop(
+    mut read_half: OwnedReadHalf,
+    max_frame: usize,
+    uplink_crc: bool,
+    engine: Arc<Mutex<VehicleSimulator>>,
+    write: Arc<Mutex<OwnedWriteHalf>>,
+    vehicle_tag: &str,
+    vehicle_log_target: &str,
+) -> std::io::Result<()> {
+    loop {
+        let body = match read_tcp_body(&mut read_half, max_frame).await {
+            Ok(b) => b,
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
+            Err(e) => return Err(e),
+        };
+        let parsed = match parse_frame_body(&body, uplink_crc) {
+            Ok(p) => p,
+            Err(e) => {
+                warn!(target: "socket", "[{}] parse frame failed: {e}", vehicle_tag);
+                continue;
+            }
+        };
+        let ParsedFrame {
+            full_type_name,
+            protobuf,
+            crc_ok,
+        } = parsed;
+        if !crc_ok {
+            warn!(
+                target: "socket",
+                "[{}] CRC mismatch fullType={full_type_name} (continuing)",
+                vehicle_tag
+            );
+        }
+        let short = to_short_type_name(&full_type_name);
+        let normalized = normalize_downlink_suffix(&short);
+        info!(
+            target: vehicle_log_target,
+            "[{}] MC -> AGV ({}): received",
+            vehicle_tag,
+            short
+        );
+        let replies = {
+            let mut eng = engine.lock().await;
+            eng.handle_downlink(&normalized, &protobuf)
+        };
+        {
+            let mut w = write.lock().await;
+            for (msg_type, payload) in replies {
+                let b = wrap(&msg_type, &payload);
+                write_tcp_frame(&mut *w, &b).await?;
+                info!(
+                    target: vehicle_log_target,
+                    "[{}] AGV -> MC ({}): sent",
+                    vehicle_tag,
+                    msg_type
+                );
+            }
+        }
+        let mut eng = engine.lock().await;
+        if eng.should_publish_status() {
+            let pb = eng.build_status_payload();
+            drop(eng);
+            let b = wrap("StatusMsg", &pb);
+            let mut w = write.lock().await;
+            write_tcp_frame(&mut *w, &b).await?;
+            drop(w);
+            engine.lock().await.after_status_published();
+            info!(
+                target: vehicle_log_target,
+                "[{}] AGV -> MC (StatusMsg): sent (after downlink)",
+                vehicle_tag
+            );
+        }
+    }
+}
+
 async fn run_session(
     stream: TcpStream,
     engine: Arc<Mutex<VehicleSimulator>>,
@@ -61,7 +218,7 @@ async fn run_session(
     let max_frame = cfg.socket.max_frame_length;
     let sim_dt = cfg.map.sim_dt_seconds;
 
-    let (mut read_half, write_half) = stream.into_split();
+    let (read_half, write_half) = stream.into_split();
     let write = Arc::new(Mutex::new(write_half));
 
     {
@@ -79,98 +236,22 @@ async fn run_session(
         vehicle_tag
     );
 
-    let write_tick = Arc::clone(&write);
-    let engine_tick = Arc::clone(&engine);
-    let tick_ms = physics_tick_ms(&cfg);
-    let tick_task = tokio::spawn(async move {
-        let mut ticker = tokio::time::interval(Duration::from_millis(tick_ms));
-        loop {
-            ticker.tick().await;
-            let mut eng = engine_tick.lock().await;
-            eng.tick(sim_dt);
-            if !eng.should_publish_status() {
-                continue;
-            }
-            let pb = eng.build_status_payload();
-            drop(eng);
-            let body = wrap("StatusMsg", &pb);
-            let mut w = write_tick.lock().await;
-            if write_tcp_frame(&mut *w, &body).await.is_err() {
-                break;
-            }
-            drop(w);
-            engine_tick.lock().await.after_status_published();
-        }
-    });
+    let tick_task = spawn_physics_status_tick_task(
+        Arc::clone(&write),
+        Arc::clone(&engine),
+        physics_tick_ms(&cfg),
+        sim_dt,
+    );
 
-    let result = async {
-        loop {
-            let body = match read_tcp_body(&mut read_half, max_frame).await {
-                Ok(b) => b,
-                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
-                Err(e) => return Err(e),
-            };
-            let parsed = match parse_frame_body(&body, uplink_crc) {
-                Ok(p) => p,
-                Err(e) => {
-                    warn!(target: "socket", "[{}] parse frame failed: {e}", vehicle_tag);
-                    continue;
-                }
-            };
-            let ParsedFrame {
-                full_type_name,
-                protobuf,
-                crc_ok,
-            } = parsed;
-            if !crc_ok {
-                warn!(
-                    target: "socket",
-                    "[{}] CRC mismatch fullType={full_type_name} (continuing)",
-                    vehicle_tag
-                );
-            }
-            let short = to_short_type_name(&full_type_name);
-            let normalized = normalize_downlink_suffix(&short);
-            info!(
-                target: vehicle_log_target,
-                "[{}] MC -> AGV ({}): received",
-                vehicle_tag,
-                short
-            );
-            let replies = {
-                let mut eng = engine.lock().await;
-                eng.handle_downlink(&normalized, &protobuf)
-            };
-            {
-                let mut w = write.lock().await;
-                for (msg_type, payload) in replies {
-                    let b = wrap(&msg_type, &payload);
-                    write_tcp_frame(&mut *w, &b).await?;
-                    info!(
-                        target: vehicle_log_target,
-                        "[{}] AGV -> MC ({}): sent",
-                        vehicle_tag,
-                        msg_type
-                    );
-                }
-            }
-            let mut eng = engine.lock().await;
-            if eng.should_publish_status() {
-                let pb = eng.build_status_payload();
-                drop(eng);
-                let b = wrap("StatusMsg", &pb);
-                let mut w = write.lock().await;
-                write_tcp_frame(&mut *w, &b).await?;
-                drop(w);
-                engine.lock().await.after_status_published();
-                info!(
-                    target: vehicle_log_target,
-                    "[{}] AGV -> MC (StatusMsg): sent (after downlink)",
-                    vehicle_tag
-                );
-            }
-        }
-    }
+    let result = session_downlink_loop(
+        read_half,
+        max_frame,
+        uplink_crc,
+        engine,
+        write,
+        vehicle_tag,
+        vehicle_log_target,
+    )
     .await;
 
     tick_task.abort();
@@ -202,49 +283,12 @@ pub async fn connection_loop(
 
     let mut running = true;
     while running {
-        let connect_fut = TcpStream::connect(addr);
-        let stream = if cfg.socket.connect_timeout_ms > 0 {
-            match tokio::time::timeout(
-                Duration::from_millis(cfg.socket.connect_timeout_ms),
-                connect_fut,
-            )
-            .await
-            {
-                Ok(Ok(s)) => Some(s),
-                Ok(Err(e)) => {
-                    warn!(
-                        target: "socket",
-                        "[{}] NOT CONNECTED — connect failed to {}: {e}",
-                        vehicle_tag,
-                        addr
-                    );
-                    None
-                }
-                Err(_) => {
-                    warn!(
-                        target: "socket",
-                        "[{}] NOT CONNECTED — connect timeout to {} after {} ms",
-                        vehicle_tag,
-                        addr,
-                        cfg.socket.connect_timeout_ms
-                    );
-                    None
-                }
-            }
-        } else {
-            match connect_fut.await {
-                Ok(s) => Some(s),
-                Err(e) => {
-                    warn!(
-                        target: "socket",
-                        "[{}] NOT CONNECTED — connect failed to {}: {e}",
-                        vehicle_tag,
-                        addr
-                    );
-                    None
-                }
-            }
-        };
+        let stream = tcp_connect_to_scheduler(
+            addr,
+            cfg.socket.connect_timeout_ms,
+            vehicle_tag.as_str(),
+        )
+        .await;
 
         let Some(stream) = stream else {
             if !cfg.socket.reconnect_enabled {

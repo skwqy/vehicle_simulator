@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::time::Duration;
+
 use sim_shared::common::fleet_serial;
 use tokio::sync::Mutex;
 
@@ -42,10 +42,19 @@ async fn main() {
         spawn_vehicle_simulator(config.clone(), robot_index, map_model.clone()).await;
     }
 
-    // Keep the main thread alive
-    loop {
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
+    tracing::info!(
+        target: "bootstrap",
+        "VDA5050 simulators running; press Ctrl+C to exit"
+    );
+
+    tokio::signal::ctrl_c()
+        .await
+        .expect("failed to listen for Ctrl+C");
+
+    tracing::info!(
+        target: "bootstrap",
+        "Shutdown signal received; stopping runtime"
+    );
 }
 
 async fn spawn_vehicle_simulator(

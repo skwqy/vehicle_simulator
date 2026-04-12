@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::Duration;
 
 use agv_plc::{config, log, map, socket};
 use sim_shared::common::fleet_serial;
@@ -37,9 +36,19 @@ async fn main() {
         spawn_vehicle_simulator(config.clone(), robot_index, map_model.clone()).await;
     }
 
-    loop {
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
+    tracing::info!(
+        target: "bootstrap",
+        "PLC simulators running; press Ctrl+C to exit"
+    );
+
+    tokio::signal::ctrl_c()
+        .await
+        .expect("failed to listen for Ctrl+C");
+
+    tracing::info!(
+        target: "bootstrap",
+        "Shutdown signal received; stopping runtime"
+    );
 }
 
 /// One `VehicleSimulator` + TCP session to the scheduler (same spawn pattern as `agv_vda5050`).
