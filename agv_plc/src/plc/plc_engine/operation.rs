@@ -9,7 +9,7 @@ use crate::scheduling_system::OperationMsg;
 
 pub(super) fn handle(eng: &mut PlcProtobufEngine, payload: &[u8]) -> Option<Vec<(String, Vec<u8>)>> {
     let msg = OperationMsg::decode(payload).ok()?;
-    eng.operation_result = 1;
+    eng.on_operation_msg_received(msg.op_code);
     info!(
         target: eng.lt(),
         "MC -> AGV (OperationMsg): frame={} op={}",

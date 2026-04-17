@@ -47,6 +47,9 @@ pub struct PlcProtobufEngine {
     fallback_remaining_s: f32,
     move_result: i32,
     operation_result: i32,
+    status_op_code: i32,
+    operation_pending_until_new_point: bool,
+    operation_anchor_point: i32,
     host_estop: bool,
 
     /// `tracing` target for this vehicle
@@ -82,7 +85,10 @@ impl PlcProtobufEngine {
             moving: false,
             fallback_remaining_s: 0.0,
             move_result: 0,
-            operation_result: -1,
+            operation_result: 1,
+            status_op_code: 1,
+            operation_pending_until_new_point: false,
+            operation_anchor_point: 0,
             host_estop: false,
             log_target,
             last_status_publish: {
@@ -141,6 +147,7 @@ impl PlcProtobufEngine {
 
     pub fn tick(&mut self, dt_seconds: f32) {
         let dt = dt_seconds.max(1e-6);
+        self.try_complete_operation_after_point_change();
         if self.active_route.is_some() {
             let speed_mps = self.pb().default_linear_speed_m_s.max(0.0);
             let mut dist = speed_mps * dt;
@@ -194,6 +201,7 @@ impl PlcProtobufEngine {
                 self.fallback_remaining_s = 0.0;
                 self.current_point = self.target_point;
                 self.move_result = 1;
+                self.try_complete_operation_after_point_change();
                 info!(
                     target: self.lt(),
                     "Fallback segment finished at target_point={}",
@@ -224,6 +232,7 @@ impl PlcProtobufEngine {
         self.moving = false;
         self.move_result = 1;
         self.current_segment_edge_id = 0;
+        self.try_complete_operation_after_point_change();
         info!(
             target: self.lt(),
             "Plant route finished at reported_point={} openTcs={}",
@@ -303,6 +312,25 @@ impl PlcProtobufEngine {
             .map(|r| r.current_edge_id())
             .unwrap_or(0);
         true
+    }
+
+    pub(crate) fn on_operation_msg_received(&mut self, op_code: i32) {
+        self.status_op_code = op_code;
+        self.operation_result = 3;
+        self.operation_pending_until_new_point = true;
+        self.operation_anchor_point = self.current_point;
+    }
+
+    fn try_complete_operation_after_point_change(&mut self) {
+        if !self.operation_pending_until_new_point {
+            return;
+        }
+        if self.current_point == self.operation_anchor_point {
+            return;
+        }
+        self.status_op_code = 1;
+        self.operation_result = 1;
+        self.operation_pending_until_new_point = false;
     }
 
     pub fn handle_downlink(&mut self, normalized_suffix: &str, payload: &[u8]) -> Vec<(String, Vec<u8>)> {

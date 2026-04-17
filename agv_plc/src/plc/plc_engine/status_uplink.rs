@@ -62,7 +62,7 @@ pub(super) fn build_payload(eng: &mut PlcProtobufEngine) -> Vec<u8> {
         battery_percent: Some(battery_pct),
         error_code: 0,
         error_message: String::new(),
-        op_code: 0,
+        op_code: eng.status_op_code,
         faultmsg: vec![],
         lift_mileage: 0,
         travel_odometer: 0,
