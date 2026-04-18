@@ -1,5 +1,6 @@
 //! Uplink: `scheduling_system.StatusMsg` payload bytes for TCP framing.
 
+use log::info;
 use prost::Message;
 
 use super::PlcProtobufEngine;
@@ -10,6 +11,21 @@ use crate::scheduling_system::{
 pub(super) fn build_payload(eng: &mut PlcProtobufEngine) -> Vec<u8> {
     let fid = eng.uplink_frame_seq;
     eng.uplink_frame_seq = eng.uplink_frame_seq.wrapping_add(1);
+
+    if eng.last_status_point_uplink != Some(eng.current_point) {
+        let prev = eng
+            .last_status_point_uplink
+            .map(|p| p.to_string())
+            .unwrap_or_else(|| "—".to_string());
+        info!(
+            target: eng.lt(),
+            "StatusMsg point changed: {} -> {} (frame_id={})",
+            prev,
+            eng.current_point,
+            fid as i32
+        );
+        eng.last_status_point_uplink = Some(eng.current_point);
+    }
 
     let pb = eng.pb();
     let battery_pct = pb.battery_percent.clamp(0, 100);

@@ -41,6 +41,9 @@ pub struct PlcProtobufEngine {
     current_segment_edge_id: i32,
 
     active_route: Option<ActiveRoute>,
+    /// Edge ids from `SegmentMsg.segments` received while a plant route is already running; FIFO.
+    /// Appended in receive order; after `complete_plant_route`, `start_pending_route_if_any` consumes
+    /// the queue and starts the next chain from `last_open_tcs_point`.
     pending_segment_ids: Vec<i32>,
 
     moving: bool,
@@ -56,6 +59,8 @@ pub struct PlcProtobufEngine {
     log_target: String,
     /// Throttle `StatusMsg` cadence (FV2 `PlcSimulationEngine.shouldPublishStatus`).
     last_status_publish: Instant,
+    /// Last `point` field sent in `StatusMsg` (for change logging).
+    last_status_point_uplink: Option<i32>,
 }
 
 impl PlcProtobufEngine {
@@ -97,6 +102,7 @@ impl PlcProtobufEngine {
                 now.checked_sub(Duration::from_millis(ms))
                     .unwrap_or(now)
             },
+            last_status_point_uplink: None,
         };
         eng.apply_initial_pose();
         eng
@@ -151,6 +157,7 @@ impl PlcProtobufEngine {
         if self.active_route.is_some() {
             let speed_mps = self.pb().default_linear_speed_m_s.max(0.0);
             let mut dist = speed_mps * dt;
+            let mut completed_segments: Vec<usize> = Vec::new();
             let done = {
                 let Some(route) = self.active_route.as_mut() else {
                     return;
@@ -161,8 +168,10 @@ impl PlcProtobufEngine {
                     };
                     let rem = (seg.len_m - route.s_m).max(0.0);
                     if rem <= 1e-6 {
+                        let completed_idx = route.edge_idx;
                         route.edge_idx += 1;
                         route.s_m = 0.0;
+                        completed_segments.push(completed_idx);
                         if route.edge_idx >= route.segments.len() {
                             break;
                         }
@@ -173,8 +182,10 @@ impl PlcProtobufEngine {
                         dist = 0.0;
                     } else {
                         dist -= rem;
+                        let completed_idx = route.edge_idx;
                         route.edge_idx += 1;
                         route.s_m = 0.0;
+                        completed_segments.push(completed_idx);
                         if route.edge_idx >= route.segments.len() {
                             break;
                         }
@@ -182,6 +193,25 @@ impl PlcProtobufEngine {
                 }
                 route.edge_idx >= route.segments.len()
             };
+            let arrivals: Vec<String> = self
+                .active_route
+                .as_ref()
+                .map(|route| {
+                    completed_segments
+                        .iter()
+                        .filter_map(|&idx| {
+                            route.segments.get(idx).map(|s| s.end_open_tcs_point.clone())
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            let had_segment_arrival = !arrivals.is_empty();
+            for name in arrivals {
+                self.apply_open_tcs_point_report(&name);
+            }
+            if had_segment_arrival {
+                self.try_complete_operation_after_point_change();
+            }
             if done {
                 self.complete_plant_route();
                 return;
@@ -242,6 +272,19 @@ impl PlcProtobufEngine {
         self.start_pending_route_if_any();
     }
 
+    /// Same rules as initial pose: `reported_point_int` with optional prefix stripping.
+    fn apply_open_tcs_point_report(&mut self, open_tcs_point: &str) {
+        let trimmed = open_tcs_point.trim();
+        if trimmed.is_empty() {
+            return;
+        }
+        let Some(m) = self.map.as_ref() else {
+            return;
+        };
+        self.last_open_tcs_point = trimmed.to_string();
+        self.current_point = reported_point_int(m, trimmed);
+    }
+
     fn sync_pose_from_route(&mut self) {
         let Some(route) = self.active_route.as_ref() else {
             return;
@@ -255,12 +298,20 @@ impl PlcProtobufEngine {
         self.heading_deg = theta.to_degrees() as f64;
     }
 
+    /// Start the next route if the scheduler queued segment ids while the previous route was active.
     fn start_pending_route_if_any(&mut self) {
         if self.pending_segment_ids.is_empty() {
             return;
         }
         let ids = std::mem::take(&mut self.pending_segment_ids);
-        if !self.try_start_route(&ids) {
+        if self.try_start_route(&ids) {
+            info!(
+                target: self.lt(),
+                "Starting queued segment chain {:?} from openTcs={}",
+                ids,
+                self.last_open_tcs_point
+            );
+        } else {
             self.moving = true;
             self.fallback_remaining_s = (self.pb().segment_travel_ms as f32) / 1000.0;
             warn!(
@@ -364,6 +415,8 @@ impl PlcProtobufEngine {
                     out = v;
                 }
             }
+            // MC may send `AckMsg` downlink (e.g. ack of AGV uplink); no simulator state, no reply.
+            "AckMsg" => {}
             _ => {
                 warn!(
                     target: self.lt(),

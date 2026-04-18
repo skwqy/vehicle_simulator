@@ -1,4 +1,10 @@
 //! Downlink: `scheduling_system.SegmentMsg`.
+//!
+//! The MC may send multiple `SegmentMsg` in sequence. While the vehicle is already executing a
+//! plant route (`active_route`), each new message’s `segments` are **appended** to
+//! `pending_segment_ids` in order. When the current route finishes, the queue is consumed FIFO and
+//! the next polyline chain is started from the reached point (`last_open_tcs_point`).
+//! `NewTaskMsg` clears the queue and cancels the active route.
 
 use log::{info, warn};
 use prost::Message;
@@ -23,7 +29,15 @@ pub(super) fn handle(eng: &mut PlcProtobufEngine, payload: &[u8]) -> Option<Vec<
         return Some(vec![("AckMsg".into(), encode::ack(eng.agv_id, msg.frame_id))]);
     }
     if eng.active_route.is_some() {
+        let n = incoming.len();
         eng.pending_segment_ids.extend(incoming.iter().copied());
+        info!(
+            target: eng.lt(),
+            "MC -> AGV (SegmentMsg): queued {} segment id(s) (pending total {}), frame={}",
+            n,
+            eng.pending_segment_ids.len(),
+            msg.frame_id
+        );
         return Some(vec![("AckMsg".into(), encode::ack(eng.agv_id, msg.frame_id))]);
     }
     if eng.try_start_route(&incoming) {

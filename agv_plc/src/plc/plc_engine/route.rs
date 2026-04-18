@@ -17,6 +17,8 @@ pub(super) struct RouteSeg {
     pub edge_id: i32,
     pub poly: Vec<(f32, f32)>,
     pub len_m: f32,
+    /// OpenTCS point name at the end of this segment (travel direction; matches `path.dest` or reversed `path.source`).
+    pub end_open_tcs_point: String,
 }
 
 pub(super) struct ActiveRoute {
@@ -70,10 +72,16 @@ pub(super) fn build_route_segments(
             pts.reverse();
         }
         let len_m = polyline_length_m(&pts);
+        let end_open_tcs_point = if rev {
+            path.source.clone()
+        } else {
+            path.dest.clone()
+        };
         out.push(RouteSeg {
             edge_id: sid,
             poly: pts,
             len_m,
+            end_open_tcs_point,
         });
         expected = if rev {
             path.source.clone()
